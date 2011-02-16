@@ -1,0 +1,19 @@
+SETUP 
+    
+1. We have mach1 (ip1)  and mach2 (ip2)
+   On both machines configure and start tun:
+
+   	mach1# modprobe tun
+   	mach1# tunctl -t tap0
+   	mach1# ifconfig tap0 10.0.0.1 netmask 255.0.0.0
+
+   	mach2# modprobe tun
+   	mach2# tunctl -t tap0
+   	mach2# ifconfig tap0 10.0.0.2 netmask 255.0.0.0
+
+2. start udp tunnel between machines:
+   	mach1#./tun tap ip1 ip2
+   	mach1#./tun tap ip2 ip1
+
+Now we have a tunnel between machines mach1 and mach2 over udp.
+

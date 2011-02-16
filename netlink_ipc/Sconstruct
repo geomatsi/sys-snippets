@@ -1,0 +1,28 @@
+#
+# Sconstruct: build with cross compiler
+#
+
+import os
+
+# compiler settings
+
+ppc_cc = '/usr/bin/powerpc-linux-gnu-gcc'
+ppc_cflags = '-g'
+ppc_lflags = '-static'
+
+# sources
+client_src = Split('client.c')
+server_src = Split('server.c')
+
+# environments
+ppc_env = Environment(CC = ppc_cc)
+
+# ppc builders
+
+ppc_client_obj = ppc_env.Object(client_src, CCFLAGS = ppc_cflags)
+ppc_server_obj = ppc_env.Object(server_src, CCFLAGS = ppc_cflags)
+
+ppc_env.Program(target = 'client', source = ppc_client_obj)
+ppc_env.Program(target = 'server', source = ppc_server_obj)
+
+

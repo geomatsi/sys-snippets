@@ -1,0 +1,27 @@
+#
+# Sconstruct: build with cross compiler
+#
+
+import os
+
+# compiler settings
+
+cc = '/usr/bin/gcc'
+cflags = '-g'
+
+# sources
+rx_src = Split('rx.c')
+tx_src = Split('tx.c')
+
+# environments
+env = Environment(CC = cc)
+
+# ppc builders
+
+rx_obj = env.Object(rx_src, CCFLAGS = cflags)
+tx_obj = env.Object(tx_src, CCFLAGS = cflags)
+
+env.Program(target = 'rx', source = rx_obj)
+env.Program(target = 'tx', source = tx_obj)
+
+
