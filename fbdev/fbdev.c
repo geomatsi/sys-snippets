@@ -73,6 +73,7 @@ int main (int argc, char *argv[])
 	size = h*w*bpp/8;
 
 	printf("framebuffer settings: %d x %d x %d\n", w, h, bpp);
+	printf("press enter to continue...\n");
 	getchar();
 
 	var_info.xoffset = 0;
@@ -110,6 +111,32 @@ int main (int argc, char *argv[])
 
 		for(j = 0; j < xsize; j++) {
 			*(mem + i*xsize + j) = color;
+		}
+	}
+
+	for(i = 0; i < 6; i++){
+		uint32_t color;
+		int xsize;
+
+		switch (bpp) {
+			case 16:
+				color = (color16[i] << 16) | (color16[i]);
+				xsize = w/2;
+				break;
+			case 32:
+				color = color32[i];
+				xsize = w;
+				break;
+			default:
+				printf("unsupported bpp: %d\n", bpp);
+				goto out;
+		}
+
+		printf("press enter to continue\n");
+		getchar();
+
+		for(j = 0; j < h*xsize; j++){
+			*(mem + j) = color;
 		}
 	}
 
