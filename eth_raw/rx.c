@@ -55,7 +55,7 @@ int rx(void)
 	bzero(buf, sizeof(buf));
 	bzero(&addr, sizeof(addr));
 
-	addr.sll_family   = PF_PACKET;   
+	addr.sll_family   = PF_PACKET;
 	addr.sll_protocol = htons(ETH_P_IP);
 	addr.sll_ifindex  = get_ifindex(eth);
 
@@ -112,7 +112,7 @@ int get_ifindex(char * ifname)
 	struct ifreq eth;
 
 	bzero(&eth, sizeof(eth));
-	sprintf(eth.ifr_name, ifname); 
+	sprintf(eth.ifr_name, ifname);
 	sock = socket(PF_INET, SOCK_STREAM, 0);
 
 	if (0 > (rc  = ioctl(sock, SIOCGIFINDEX, &eth))) {
