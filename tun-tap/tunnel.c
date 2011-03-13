@@ -31,12 +31,12 @@ int main(int argc, char *argv[])
 		printf("usage: bridge tap|tun src dest\n");
 		exit(1);
 	}
-	
+
 	if (strncmp(argv[1], "tun", 3) && strncmp(argv[1], "tap", 3)) {
 		printf("usage: bridge tap|tun\n");
 		exit(1);
 	}
-	
+
 	if (!strncmp(argv[1], "tun", 3)) {
 		flags = IFF_TUN | IFF_NO_PI;
 	} else if (!strncmp(argv[1], "tap", 3)) {
@@ -45,27 +45,27 @@ int main(int argc, char *argv[])
 		/* should not happen */
 		assert(0);
 	}
-	
+
 	/* configure tun for tun%d or tap%d */
 	if ((fd = open("/dev/net/tun", O_RDWR)) < 0) {
 		perror("open");
 		exit(-1);
 	}
-	
+
 	memset(&ifr, 0, sizeof(ifr));
 	ifr.ifr_flags = flags;
 	sprintf(ifr.ifr_name, "%s%d", argv[1], 0);
-	
+
 	if (ioctl(fd, TUNSETIFF, (void *) &ifr) < 0) {
 		perror("ioctl TUNSETIFF");
 		exit(-1);
 	}
-	
+
 	if (ioctl(fd, TUNSETNOCSUM, 1) < 0) {
 		perror("ioctl TUNSETNOSUM");
 		exit(-1);
 	}
-	
+
 
 	/* create udp connection */
 
@@ -73,7 +73,7 @@ int main(int argc, char *argv[])
 		perror("socket");
 		exit(-1);
 	}
-	
+
 	/*
 	opt = fcntl(sock, F_GETFL, 0);
 	fcntl(sock, F_SETFL, opt | O_NONBLOCK);
@@ -83,7 +83,7 @@ int main(int argc, char *argv[])
 	server.sin_addr.s_addr = inet_addr(argv[2]);
 	server.sin_port = htons(20001);
 	server.sin_family = AF_INET;
-	
+
 	if( 0 > bind(sock, (struct sockaddr *) &server, sizeof(server)) ){
 	    perror("bind");
 	    exit(-1);
@@ -95,7 +95,7 @@ int main(int argc, char *argv[])
 	client.sin_family = AF_INET;
 
 	/* go on */
-	
+
 	max = max(fd, sock) + 1;
 
 	while(1){
@@ -135,5 +135,3 @@ int main(int argc, char *argv[])
 		}
 	}
 }
-
-

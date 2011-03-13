@@ -7,8 +7,8 @@ all: tunnel
 tunnel: tunnel.o
 	gcc -o $@ $^
 
-tunnel.o: tunnel.c
+%.o: %.c
 	gcc -c -o $@ $^
 
-clean: 
-	rm -rf tunnel tunnel.o
+clean:
+	rm -rf tunnel *.o
