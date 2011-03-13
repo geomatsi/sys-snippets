@@ -18,7 +18,6 @@
 /* */
 
 int tx(void);
-int get_ifindex(char *);
 void display(unsigned char *, int);
 
 /* */
@@ -53,7 +52,7 @@ int tx(void)
 
 	addr.sll_family   = PF_PACKET;   
 	addr.sll_halen    = ETH_ALEN;     
-	addr.sll_ifindex  = get_ifindex("eth0");
+	addr.sll_ifindex  = get_ifindex_by_ifname("eth0");
 	addr.sll_addr[0]  = 0xbb;     
 	addr.sll_addr[1]  = 0xbb;     
 	addr.sll_addr[2]  = 0xbb;
@@ -101,22 +100,4 @@ void display(unsigned char * buffer, int len)
 	}
 
 	printf("\n");
-}
-
-int get_ifindex(char * ifname)
-{
-	int sock, rc;
-	struct ifreq eth;
-
-	bzero(&eth, sizeof(eth));
-	sprintf(eth.ifr_name, ifname); 
-	sock = socket(PF_INET, SOCK_STREAM, 0);
-
-	if (0 > (rc  = ioctl(sock, SIOCGIFINDEX, &eth))) {
-		perror("ioctl");
-		return -1;
-	}
-
-	close(sock);
-	return eth.ifr_ifindex;
 }
