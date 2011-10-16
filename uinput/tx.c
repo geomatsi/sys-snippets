@@ -32,34 +32,33 @@ int wii_acc_init(void)
 		goto open_err;
 	}
 
-	if (0 > ioctl(uinput_fd, UI_SET_EVBIT, EV_KEY)) {
-		perror("ioctl UI_SET_EVBIT");
-		exit(-1);
-	}
-
 	if (0 > ioctl(uinput_fd, UI_SET_EVBIT, EV_REL)) {
 		perror("ioctl UI_SET_EVBIT");
-		exit(-1);
+		ret = -EINVAL;
+		goto ioctl_err;
 	}
 
 	if (ioctl(uinput_fd, UI_SET_RELBIT, REL_X) < 0) {
-		perror("UI_SET_ABSBIT");
-		return -1;
+		perror("UI_SET_RELBIT");
+		ret = -EINVAL;
+		goto ioctl_err;
 	}
 
 	if (ioctl(uinput_fd, UI_SET_RELBIT, REL_Y) < 0) {
-		perror("UI_SET_ABSBIT");
-		return -1;
+		perror("UI_SET_RELBIT");
+		ret = -EINVAL;
+		goto ioctl_err;
 	}
 
 	if (ioctl(uinput_fd, UI_SET_RELBIT, REL_Z) < 0) {
-		perror("UI_SET_ABSBIT");
-		return -1;
+		perror("UI_SET_RELBIT");
+		ret = -EINVAL;
+		goto ioctl_err;
 	}
 
 	memset(&uinput_dev, 0, sizeof(uinput_dev));
 	strncpy(uinput_dev.name, "uinput_test", UINPUT_MAX_NAME_SIZE);
-	uinput_dev.id.bustype = BUS_VIRTUAL;
+	uinput_dev.id.bustype = 0x1;
 	uinput_dev.id.vendor = 0x1;
 	uinput_dev.id.product = 0x1;
 	uinput_dev.id.version = 0x1;
