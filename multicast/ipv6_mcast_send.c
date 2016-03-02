@@ -10,6 +10,7 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <sys/stat.h>
+#include <net/if.h>
 #include <fcntl.h>
 #include <stdio.h>
 
@@ -22,8 +23,8 @@ main(int argc, char *argv[])
 	ssize_t len = 1;
 	int sd, fd, on = 1, hops = 255, ifidx = 0;
 
-	if (argc < 3) {
-		printf("\nUsage: %s <address> <port>\n\nExample: %s ff02::5:6 12345\n\n", argv[0], argv[0]);
+	if (argc < 4) {
+		printf("\nUsage: %s <iface> <address> <port>\n\nExample: %s eth0 ff02::5:6 12345\n\n", argv[0], argv[0]);
 		return 1;
 	}
 
@@ -31,6 +32,12 @@ main(int argc, char *argv[])
 	if (sd < 0) {
 		perror("socket");
 		return 1;
+	}
+
+	ifidx = if_nametoindex(argv[1]);
+	if (ifidx == 0) {
+		perror("if_nametoindex");
+		return -1;
 	}
 
 	if (setsockopt(sd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on))) {
@@ -55,8 +62,8 @@ main(int argc, char *argv[])
 
 	memset(&saddr, 0, sizeof(struct sockaddr_in6));
 	saddr.sin6_family = AF_INET6;
-	saddr.sin6_port = htons(atoi(argv[2]));
-	inet_pton(AF_INET6, argv[1], &saddr.sin6_addr);
+	saddr.sin6_port = htons(atoi(argv[3]));
+	inet_pton(AF_INET6, argv[2], &saddr.sin6_addr);
 
 	memcpy(&mreq.ipv6mr_multiaddr, &saddr.sin6_addr, sizeof(mreq.ipv6mr_multiaddr));
 	mreq.ipv6mr_interface = ifidx;
