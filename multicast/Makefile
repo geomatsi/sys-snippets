@@ -1,8 +1,7 @@
 CC = gcc
 CFLAGS = -Wall -g
 
-all: ipv6_mcast_recv ipv6_mcast_send
+all: mcast6
 
 clean:
-	rm -f ipv6_mcast_recv
-	rm -f ipv6_mcast_send
+	rm -f mcast6
