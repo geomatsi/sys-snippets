@@ -34,10 +34,11 @@ void mcast_usage(char *name)
 	printf("\t-m, --message\t\t\tmessage for multicast client\n");
 	printf("\t-i, --intf <interface>\t\tbind to network interface\n");
 	printf("\t-a, --addr <address>\t\tmulticast address\n");
-	printf("\t-p, --port <port>\t\tport\n");
+	printf("\t-p, --port <port>\t\tport, default is 9999\n");
 	printf("\t--hops = <hops>\t\t\tmulticast packet lifetime\n");
 	printf("\t--noloop\t\t\tdisable loopback for outgoing multicast diagrams\n");
-	printf("\t--flood\t\t\tmulticast client flood mode: no need to press enter to send next packet\n");
+	printf("\t--nojoin\t\t\tprevent client from joining multicast group\n");
+	printf("\t--cont\t\t\tmulticast client continous mode: no need to press enter to send next packet\n");
 	printf("\t--hexdump\t\t\thexdump packet mode for multicast server\n");
 	printf("\nMinimal client example: %s -c -i eth0 -a ff02::5:6 -p 12345 -m 'test message'\n\n", name);
 	printf("\nMinimal server example: %s -s -i eth0 -a ff02::5:6 -p 12345\n\n", name);
@@ -47,15 +48,15 @@ void mcast_usage(char *name)
 
 void dump_packet(char *b, int n)
 {
-    int p;
+	int p;
 
-    for(p = 0; p < n; p++) {
-        printf("0x%02x ", *(b + p));
-        if ((p > 0) && ((p % 64) == 0))
-            printf("\n");
-    }
+	for(p = 0; p < n; p++) {
+		printf("0x%02x ", *(b + p));
+		if ((p > 0) && ((p % 64) == 0))
+			printf("\n");
+	}
 
-    printf("\n");
+	printf("\n");
 }
 
 /* */
@@ -80,8 +81,8 @@ int mcast_server(int sd, bool dump, struct sockaddr_in6 *saddr, struct ipv6_mreq
 
 	/* join mcast group */
 
-	if (setsockopt(sd, IPPROTO_IPV6, IPV6_JOIN_GROUP, (char *)mreq, sizeof(*mreq))) {
-		perror("setsockopt IPV6_JOIN_GROUP");
+	if (setsockopt(sd, IPPROTO_IPV6, IPV6_ADD_MEMBERSHIP, (char *)mreq, sizeof(*mreq))) {
+		perror("setsockopt IPV6_ADD_MEMBERSHIP");
 		return -1;
 	}
 
@@ -92,7 +93,7 @@ int mcast_server(int sd, bool dump, struct sockaddr_in6 *saddr, struct ipv6_mreq
 		FD_ZERO(&rset);
 		FD_SET(sd, &rset);
 
-		tv.tv_sec  = 10;
+		tv.tv_sec = 10;
 		tv.tv_usec = 0;
 
 		rc = select(sd + 1, &rset, NULL, NULL, &tv);
@@ -145,34 +146,37 @@ int mcast_server(int sd, bool dump, struct sockaddr_in6 *saddr, struct ipv6_mreq
 
 /* */
 
-int mcast_client(int sd, char *msg, bool flood, struct sockaddr_in6 *saddr, struct ipv6_mreq *mreq)
+int mcast_client(int sd, char *msg, bool cont, bool join, struct sockaddr_in6 *saddr, struct ipv6_mreq *mreq)
 {
 	int faults = 0;
 	int rc = 0;
 	char *pkt;
+	int cnt = 0;
 
 	/* join mcast group */
 
-	if (setsockopt(sd, IPPROTO_IPV6, IPV6_JOIN_GROUP, (char *)mreq, sizeof(*mreq))) {
-		perror("setsockopt IPV6_JOIN_GROUP");
-		return -1;
+	if (join) {
+		if (setsockopt(sd, IPPROTO_IPV6, IPV6_ADD_MEMBERSHIP, (char *)mreq, sizeof(*mreq))) {
+			perror("setsockopt IPV6_ADD_MEMBERSHIP");
+			return -1;
+		}
 	}
 
 	/* client */
 
-	pkt = calloc(1, strlen(msg) + 2);
-	strncpy(pkt, msg, strlen(msg));
-	pkt[strlen(msg)] = '\n';
+	pkt = calloc(1, strlen(msg) + 10);
 
 	while (faults < 5) {
+		memset(pkt, 0x0, strlen(msg) + 10);
+		snprintf(pkt, strlen(msg) + 10, "%s:%d\n", msg, cnt++);
 		rc = sendto(sd, pkt, strlen(pkt) + 1, 0, (const struct sockaddr *)saddr, sizeof(*saddr));
 		if (rc < 0) {
 			perror("sendto");
 			faults++;
 		}
 
-		if (flood) {
-			usleep(10000);
+		if (cont) {
+			sleep(1);
 		} else {
 			printf("press enter to send next packet...\n");
 			getchar();
@@ -193,14 +197,15 @@ int main(int argc, char *argv[])
 	int sd;
 
 	enum tool_type mtype = MCAST_NOTSET;
-	bool flood = false;
+	bool cont = false;
 	bool dump = false;
+	bool join = true;
 
 	char *message = NULL;
 	char *ifname = NULL;
 	int ifidx = 0;
 	char *addr = NULL;
-	int port = 0;
+	int port = 9999;
 	int hops = 255;
 	int loop = 1;
 
@@ -208,23 +213,24 @@ int main(int argc, char *argv[])
 
 	int opt;
 	const char opts[] = "a:p:i:m:sch";
-    const struct option longopts[] = {
-        {"help", no_argument, NULL, 'h'},
-        {"addr", required_argument, NULL, 'a'},
-        {"port", required_argument, NULL, 'p'},
-        {"intf", required_argument, NULL, 'i'},
+	const struct option longopts[] = {
+		{"help", no_argument, NULL, 'h'},
+		{"addr", required_argument, NULL, 'a'},
+		{"port", required_argument, NULL, 'p'},
+		{"intf", required_argument, NULL, 'i'},
 		{"client", no_argument, NULL, 'c'},
 		{"server", no_argument, NULL, 's'},
 		{"message", required_argument, NULL, 'm'},
-        {"hexdump", no_argument, NULL, '0'},
-        {"hops", required_argument, NULL, '1'},
-        {"noloop", no_argument, NULL, '2'},
-        {"flood", no_argument, NULL, '3'},
-        {NULL,}
-    };
+		{"hexdump", no_argument, NULL, '0'},
+		{"hops", required_argument, NULL, '1'},
+		{"noloop", no_argument, NULL, '2'},
+		{"cont", no_argument, NULL, '3'},
+		{"nojoin", no_argument, NULL, '4'},
+		{NULL,}
+	};
 
-    while (opt = getopt_long(argc, argv, opts, longopts, &opt), opt > 0) {
-        switch (opt) {
+	while (opt = getopt_long(argc, argv, opts, longopts, &opt), opt > 0) {
+		switch (opt) {
 			case 'c':
 				mtype = MCAST_CLIENT;
 				break;
@@ -235,8 +241,8 @@ int main(int argc, char *argv[])
 				addr = strdup(optarg);
 				break;
 			case 'p':
-                port = atoi(optarg);
-                break;
+				port = atoi(optarg);
+				break;
 			case 'i':
 				ifname = strdup(optarg);
 				break;
@@ -253,14 +259,17 @@ int main(int argc, char *argv[])
 				loop = 0;
 				break;
 			case '3':
-				flood = 1;
+				cont = true;
 				break;
-            case 'h':
+			case '4':
+				join = false;
+				break;
+			case 'h':
 			default:
 				mcast_usage(argv[0]);
 				exit(0);
-        }
-    }
+		}
+	}
 
 	/* sanity check */
 
@@ -280,8 +289,8 @@ int main(int argc, char *argv[])
 			exit(0);
 		}
 
-		printf("client: addr[%s] ifname[%s] port[%d] hops[%d] loop[%d] message[%s] flood[%d]\n",
-				addr, ifname, port, hops, loop, message, flood);
+		printf("client: addr[%s] ifname[%s] port[%d] hops[%d] loop[%d] message[%s] cont[%d] join[%d]\n",
+				addr, ifname, port, hops, loop, message, cont, join);
 		break;
 	default:
 		printf("should be client or server...\n");
@@ -335,7 +344,7 @@ int main(int argc, char *argv[])
 
 	saddr->sin6_family = AF_INET6;
 	saddr->sin6_port = htons(port);
-	saddr->sin6_addr = in6addr_any;
+	inet_pton(AF_INET6, addr, &saddr->sin6_addr);
 
 	maddr = calloc(1, sizeof(*maddr));
 	if (!maddr) {
@@ -363,7 +372,7 @@ int main(int argc, char *argv[])
 		mcast_server(sd, dump, saddr, mreq);
 		break;
 	case MCAST_CLIENT:
-		mcast_client(sd, message, flood, maddr, mreq);
+		mcast_client(sd, message, cont, join, maddr, mreq);
 		break;
 	default:
 		printf("undefined tool type...\n");
