@@ -1,7 +1,7 @@
 CC = gcc
 CFLAGS = -Wall -g
 
-all: mcast6
+all: mcast6 mcast4
 
 clean:
-	rm -f mcast6
+	rm -f mcast6 mcast4
