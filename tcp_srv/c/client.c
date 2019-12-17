@@ -1,132 +1,142 @@
-#include<sys/socket.h>
-#include<netinet/in.h>
-#include<unistd.h>
-#include<signal.h>
-#include<errno.h>
+// SPDX-License-Identifier: GPL-2.0
+
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <sys/select.h>
+#include <arpa/inet.h>
+#include <unistd.h>
+#include <string.h>
+#include <signal.h>
+#include <stdlib.h>
+#include <errno.h>
+#include <stdio.h>
 
 #define MAXLEN 100
 
-void pipe_handler(int);
-void usr_handler(int);
+static void pipe_handler(int sig);
+static void usr_handler(int sig);
+static int echo_handler(int sockfd);
 
-int main(int argc,char ** argv){
+int main(int argc, char **argv)
+{
+	struct sockaddr_in server;
+	struct sockaddr_in local;
+	char message[MAXLEN + 1];
+	socklen_t len;
 	int sockfd;
-	char message[MAXLEN+1];
-	struct sockaddr_in server,local;
-	int len = sizeof(local);
-		
-	signal(SIGPIPE,pipe_handler);
-	signal(SIGUSR1,usr_handler);
-	
-	if(argc != 2){
-			printf("Usage: %s <ip> \n",argv[0]);
-			exit(0);
+	int ret;
+
+	signal(SIGPIPE, pipe_handler);
+	signal(SIGUSR1, usr_handler);
+
+	if (argc != 2) {
+		printf("Usage: %s <ip>\n", argv[0]);
+		exit(0);
 	}
 
-	if( (sockfd = socket(AF_INET,SOCK_STREAM,0)) < 0){
-			perror(">>> socket");
-			exit(1);
+	sockfd = socket(AF_INET, SOCK_STREAM, 0);
+	if (sockfd < 0) {
+		perror(">>> socket");
+		exit(1);
 	}
 
-	bzero(&server,sizeof(server));
+	memset(&server, 0x0, sizeof(server));
 	server.sin_family = AF_INET;
 	server.sin_port = htons(10000);
-	
-	if(inet_pton(AF_INET,argv[1],&server.sin_addr) <= 0){
+
+	len = sizeof(local);
+
+	ret = inet_pton(AF_INET, argv[1], &server.sin_addr);
+	if (ret <= 0) {
 		perror(">>> inet_pton");
 		exit(1);
 	}
 
-	if(connect(sockfd,(struct sockaddr *) &server,sizeof(server)) < 0){
+	ret = connect(sockfd, (struct sockaddr *)&server, sizeof(server));
+	if (ret < 0) {
 		perror(">>> connect");
 		exit(1);
 	}
-	
-	if( getsockname(sockfd,(struct sockaddr*)&local,&len) < 0){
+
+	ret = getsockname(sockfd, (struct sockaddr *)&local, &len);
+	if (ret < 0) {
 		perror(">>> getpeername");
 		exit(1);
-	}else{
-		printf(">>> Local socket:  ADDR %s PORT %d\n",
-			inet_ntop(AF_INET,&local.sin_addr,message,sizeof(message)),
-				ntohs(local.sin_port));
 	}
-	
-	if ( echo_handler(sockfd) < 0){
-		perror(">>> problem");
+
+	printf(">>> Local socket:  ADDR %s PORT %d\n",
+			inet_ntop(AF_INET, &local.sin_addr, message, sizeof(message)),
+			ntohs(local.sin_port));
+
+	ret = echo_handler(sockfd);
+	if (ret < 0) {
+		perror(">>> echo_handler");
 		exit(1);
 	}
-	
+
 	close(sockfd);
 	exit(0);
 }
 
-int echo_handler(int sockfd){
-		
+int echo_handler(int sockfd)
+{
 	char send[MAXLEN];
 	char recv[MAXLEN];
 	fd_set rset;
-	int rc;
-	
-	while(1){
-			
-		bzero(send,sizeof(send));
-		bzero(recv,sizeof(recv));
+	int ret;
 
-		FD_SET(0,&rset);
-		FD_SET(sockfd,&rset);
+	while (1) {
+		memset(send, 0x0, sizeof(send));
+		memset(recv, 0x0, sizeof(recv));
 
-		if( (rc = select(sockfd+1,&rset,NULL,NULL,NULL)) < 0){
-			if(errno == EINTR){
+		FD_SET(0, &rset);
+		FD_SET(sockfd, &rset);
+
+		ret = select(sockfd + 1, &rset, NULL, NULL, NULL);
+		if (ret < 0) {
+			if (errno == EINTR) {
 				perror(">>> 'accept' was interrupted, accept again");
 				continue;
-			}else{
-				perror(">>> exit - some other problem ");
+			} else {
+				perror(">>> select");
 				exit(1);
 			}
 		}
 
-		if(FD_ISSET(0,&rset)){
-			gets(send);	
-			
-			if(strlen(send) == 0){
-				return 0;
-			}else{	
-				send[strlen(send)] = '\n';
-			}
-			
-			if(write(sockfd,send,strlen(send)) < 0){
-				return -1;
-			}
+		if (FD_ISSET(0, &rset)) {
+			fgets(send, sizeof(send) - 1, stdin);
 
+			// use CTRL-D to exit
+			if (strlen(send) == 0)
+				return 0;
+
+			ret = write(sockfd, send, strlen(send));
+			if (ret < 0)
+				return -1;
 		}
 
-		if(FD_ISSET(sockfd,&rset)){
-
-		
-			if((rc = read(sockfd,recv,MAXLEN)) < 0){
+		if (FD_ISSET(sockfd, &rset)) {
+			ret = read(sockfd, recv, MAXLEN);
+			if (ret < 0)
 				return -1;
-			}
 
-			if(rc == 0){
-				puts(">>> server terminated prematurely");
+			if (ret == 0) {
+				printf(">>> server terminated prematurely\n");
 				return 0;
 			}
-			
-			printf(">>> reading from server: ");
-			puts(recv);
+
+			printf(">>> reading from server: %s", recv);
 		}
 	}
 }
 
-void usr_handler(int c){
-	puts(">>> got SIGUSR1\n");
+void usr_handler(int sig)
+{
+	printf(">>> got SIGUSR1\n");
 }
 
-void pipe_handler(int c){
-	puts(">>> got SIGPIPE\n");
+void pipe_handler(int sig)
+{
+	printf(">>> got SIGPIPE\n");
 	exit(1);
 }
-
-
-
-
