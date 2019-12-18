@@ -1,195 +1,216 @@
-#include<sys/socket.h>
-#include<netinet/in.h>
-#include<unistd.h>
-#include<signal.h>
-#include<errno.h>
-#include<sys/types.h>
-#include<sys/wait.h>
-#include<time.h>
+// SPDX-License-Identifier: GPL-2.0
+
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <signal.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <string.h>
+#include <errno.h>
+#include <stdio.h>
+#include <time.h>
 
 #define LISTEN 5
 #define MAXLEN 100
 #define MAXCLIENTS 2
 
-int listenfd;
-void int_handler(int);
+static int handle_echo(int sock);
+static void int_handler(int);
 
-int main(int argc,char ** argv){
-	
+int main(int argc, char **argv)
+{
 	struct sockaddr_in server;
 	struct sockaddr_in client;
-	char message[MAXLEN+1];
+	char message[MAXLEN + 1];
 	int clients[MAXCLIENTS];
-	int sockfd;
-	struct timeval tv;
 	struct sigaction act;
+	struct timeval tv;
+	socklen_t len;
+	int listenfd;
 	fd_set rset;
-	int i,rc,len,max;
-	
-	len = sizeof(client);
+	int sockfd;
+	int ret;
+	int max;
+	int i;
 
-		
-	bzero(&act,sizeof(act));
+	memset(&act, 0x0, sizeof(act));
 	act.sa_handler = int_handler;
 	sigemptyset(&act.sa_mask);
 	act.sa_flags = 0;
-	sigaction(SIGINT,&act,NULL);
-	
+	sigaction(SIGINT, &act, NULL);
 
-	
-	if( (listenfd = socket(AF_INET,SOCK_STREAM,0)) < 0){
-			perror(">>> socket");
-			exit(1);
+	listenfd = socket(AF_INET, SOCK_STREAM, 0);
+	if (listenfd < 0) {
+		perror(">>> socket");
+		exit(1);
 	}
 
-	bzero(&server,sizeof(server));
+	memset(&server, 0x0, sizeof(server));
 	server.sin_family = AF_INET;
 	server.sin_port = htons(10000);
 	server.sin_addr.s_addr = htonl(INADDR_ANY);
 
-	if(bind(listenfd,(struct sockaddr *) &server,sizeof(server)) < 0){
+	len = sizeof(client);
+
+	ret = bind(listenfd, (struct sockaddr *) &server, sizeof(server));
+	if (ret < 0) {
 		perror(">>> bind");
 		exit(1);
 	}
 
-	if( listen(listenfd,LISTEN) < 0){
+	ret = listen(listenfd, LISTEN);
+	if (ret < 0) {
 		perror(">>> listen");
 		exit(1);
 	}
 
-	for(i = 0; i < MAXCLIENTS; i++) clients[i] = -1;
-	
-	for(;;){
+	for (i = 0; i < MAXCLIENTS; i++)
+		clients[i] = -1;
 
+	for (;;) {
 		FD_ZERO(&rset);
-		FD_SET(listenfd,&rset);
+		FD_SET(listenfd, &rset);
 		max = listenfd;
-		for(i = 0; i < MAXCLIENTS; i++){
-			if (clients[i] == -1) continue;
-			FD_SET(clients[i],&rset);
-			if(max < clients[i]) max = clients[i];
+
+		for (i = 0; i < MAXCLIENTS; i++) {
+			if (clients[i] == -1)
+				continue;
+
+			FD_SET(clients[i], &rset);
+
+			if (max < clients[i])
+				max = clients[i];
 		}
-		
+
 		tv.tv_sec = 5;
 		tv.tv_usec = 0;
-		
-		rc = select(max + 1,&rset,NULL,NULL,&tv);
-		
-		if(rc == 0){
-			printf(">>> select timeout\n");			
+
+		ret = select(max + 1, &rset, NULL, NULL, &tv);
+
+		if (ret == 0) {
+			printf(">>> select timeout\n");
 			continue;
 		}
 
-		if(rc == -1){
-			if(errno == EINTR){
+		if (ret == -1) {
+			if (errno == EINTR) {
 				perror(">>> 'select' was interrupted, try again");
 				continue;
-			}else{
-				perror(">>> exit - some other problem");
+			} else {
+				perror(">>> select");
 				exit(1);
 			}
 		}
-		
-		if (FD_ISSET(listenfd,&rset)){		
-			if( (sockfd = accept(listenfd,(struct sockaddr *) NULL,NULL)) < 0){
-				if(errno == EINTR){
+
+		if (FD_ISSET(listenfd, &rset)) {
+			sockfd = accept(listenfd, (struct sockaddr *) NULL, NULL);
+			if (sockfd < 0) {
+				if (errno == EINTR) {
 					perror(">>> 'accept' was interrupted, accept again");
 					continue;
-				}else{
-					perror(">>> exit - some other problem ");
+				} else {
+					perror(">>> accept");
 					exit(1);
 				}
 			}
-			
-			for(i = 0; i < MAXCLIENTS; i++){
-				if(clients[i] == -1){
-					if( getpeername(sockfd,(struct sockaddr*)&client,&len) < 0){
+
+			for (i = 0; i < MAXCLIENTS; i++) {
+				if (clients[i] == -1) {
+					ret = getpeername(sockfd, (struct sockaddr *)&client, &len);
+					if (ret < 0) {
 						perror(">>> getpeername");
 						exit(1);
-					}else{
+					} else {
 						printf(">>> open connection from addr %s port %d\n",
-						inet_ntop(AF_INET,&client.sin_addr,message,
-								sizeof(message)),ntohs(client.sin_port));
+							inet_ntop(AF_INET, &client.sin_addr,
+								message, sizeof(message)),
+							ntohs(client.sin_port));
 					}
+
 					clients[i] = sockfd;
 					break;
 				}
 
-				if(i == MAXCLIENTS - 1){
+				if (i == MAXCLIENTS - 1) {
 					printf(">>> Clients queue is full - drop client\n");
 					close(sockfd);
 				}
 			}
 		}
-		
-		for(i = 0; i < MAXCLIENTS; i++){
-			if (clients[i] == -1) continue;
-			if (! FD_ISSET(clients[i],&rset)) continue;
-			
-			rc = handle_echo(clients[i]);
-			
-			if( getpeername(clients[i],(struct sockaddr*)&client,&len) < 0){
+
+		for (i = 0; i < MAXCLIENTS; i++) {
+			if (clients[i] == -1)
+				continue;
+
+			if (!FD_ISSET(clients[i], &rset))
+				continue;
+
+			ret = getpeername(clients[i], (struct sockaddr *)&client, &len);
+			if (ret < 0) {
 				perror(">>> getpeername");
 				exit(1);
 			}
 
-			if(rc < 0){
-				perror(">>> problem with socket");
+			ret = handle_echo(clients[i]);
+			if (ret < 0) {
 				printf(">>> closing this connection: addr %s port %d\n",
-				inet_ntop(AF_INET,&client.sin_addr,message,sizeof(message)),
+				inet_ntop(AF_INET, &client.sin_addr, message, sizeof(message)),
 					ntohs(client.sin_port));
 				close(clients[i]);
 				clients[i] = -1;
-			}
-			
-			if(rc == 0){
-				printf(">>> client gone,closing connection: addr %s port %d\n",
-				inet_ntop(AF_INET,&client.sin_addr,message,sizeof(message)),
-					ntohs(client.sin_port));
-				close(clients[i]);
-				clients[i] = -1;
-			}
-			
-			if(rc > 0){
-				printf(">>> session  OK: addr %s port %d\n",
-				inet_ntop(AF_INET,&client.sin_addr,message,sizeof(message)),
-					ntohs(client.sin_port));
 			}
 
+			if (ret == 0) {
+				printf(">>> client gone,closing connection: addr %s port %d\n",
+				inet_ntop(AF_INET, &client.sin_addr, message, sizeof(message)),
+					ntohs(client.sin_port));
+				close(clients[i]);
+				clients[i] = -1;
+			}
+
+			if (ret > 0) {
+				printf(">>> session  OK: addr %s port %d\n",
+				inet_ntop(AF_INET, &client.sin_addr, message, sizeof(message)),
+					ntohs(client.sin_port));
+			}
 		}
 	}
-	
+
 	close(listenfd);
 }
 
-
-int handle_echo(int sock){
-	
+int handle_echo(int sock)
+{
 	char line[MAXLEN];
-	char c, * ptr = line;	
-	int j = 0;
-		
-	bzero(line,sizeof(line));
-		
-	for(;;){
-		if( (j = read(sock,&c,1)) < 0){
+	char *ptr;
+	char c;
+	int ret;
+
+	memset(line, 0x0, sizeof(line));
+	ptr = line;
+
+	for (;;) {
+		ret = read(sock, &c, 1);
+		if (ret < 0) {
 			perror(">>> read");
 			return -1;
 		}
 
-		if(j == 0){
+		if (ret == 0)
 			return 0;
-		}
 
-		if(j > 0){
+		if (ret > 0) {
 			*ptr++ = c;
-			if(c == '\n'){
+			if (c == '\n')
 				break;
-			}	
 		}
 	}
-			
-	if( write(sock,line,MAXLEN) < 0){
+
+	ret = write(sock, line, MAXLEN);
+	if (ret < 0) {
 		perror(">>> write");
 		return -1;
 	}
@@ -197,9 +218,8 @@ int handle_echo(int sock){
 	return 1;
 }
 
-void int_handler(int i){
-	puts(">>>got SIGINT - exiting\n");
+void int_handler(int sig)
+{
+	printf(">>> SIGINT\n");
 	exit(0);
 }
-
-
