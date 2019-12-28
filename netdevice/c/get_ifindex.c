@@ -1,32 +1,37 @@
+// SPDX-License-Identifier: GPL-2.0
+
 #include <sys/ioctl.h>
 #include <net/if.h>
-
-#include <strings.h>
 #include <string.h>
 #include <unistd.h>
 #include <stdlib.h>
 #include <stdio.h>
 
-int main(int argc, char * argv[])
+int main(int argc, char *argv[])
 {
-	int sock, rc;
 	struct ifreq eth;
+	int sock;
+	int ret;
 
-	bzero(&eth, sizeof(eth));
+	memset(&eth, 0x0, sizeof(eth));
 
-	if (argc < 2) {
+	if (argc < 2)
 		sprintf(eth.ifr_name, "eth0");
-	} else {
+	else
 		snprintf(eth.ifr_name, sizeof(eth) - 1, argv[1]);
-	}
 
 	sock = socket(PF_INET, SOCK_STREAM, 0);
+	if (sock < 0) {
+		perror("socket");
+		exit(-1);
+	}
 
-	if (0 > (rc  = ioctl(sock, SIOCGIFINDEX, &eth))) {
+	ret = ioctl(sock, SIOCGIFINDEX, &eth);
+	if (ret < 0) {
 		perror("ioctl");
 		exit(-1);
 	}
 
-	printf(">> index[%s] = %d\n", eth.ifr_name, eth.ifr_ifindex);
+	printf("ifindex[%s] = %d\n", eth.ifr_name, eth.ifr_ifindex);
 	return 0;
 }
