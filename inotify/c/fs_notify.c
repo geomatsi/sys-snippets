@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-2.0
+
 #include <sys/inotify.h>
 #include <sys/select.h>
 #include <sys/ioctl.h>
@@ -19,11 +21,9 @@ int main(int argc, char **argv)
 	int j;
 
 	if (argc != 2) {
-		printf("Usage: %s </path/to/dir/or/file> \n", argv[0]);
+		printf("Usage: %s </path/to/dir/or/file>\n", argv[0]);
 		exit(-1);
 	}
-
-	/* init inotify */
 
 	ifd = inotify_init1(0);
 	if (ifd < 0) {
@@ -31,23 +31,17 @@ int main(int argc, char **argv)
 		exit(-1);
 	}
 
-	/* add inotify watch */
-
 	wfd = inotify_add_watch(ifd, argv[1], IN_ALL_EVENTS);
 	if (wfd < 0) {
 		perror("inotify_add_watch");
 		exit(-1);
 	}
 
-	/* wait for events */
-
-	while(1) {
-
+	while (1) {
 		FD_SET(ifd, &rset);
-
 		ret = select(ifd + 1, &rset, NULL, NULL, NULL);
 		if (ret < 0) {
-			if(errno == EINTR){
+			if (errno == EINTR) {
 				perror("select interrupt");
 				exit(0);
 			} else {
@@ -57,26 +51,20 @@ int main(int argc, char **argv)
 		}
 
 		if (FD_ISSET(ifd, &rset)) {
-
-			/* check event queue length */
-
 			ret = ioctl(ifd, FIONREAD, &len);
 			if (ret < 0) {
 				perror("ioctl");
 				exit(-1);
-			} else {
-				printf("INOTIFY: pending %d events\n", len / sizeof(*event));
 			}
 
-			/* read inotify events */
-
+			printf("INOTIFY: pending %ld events\n", len / sizeof(*event));
 			len = read(ifd, events, sizeof(events));
 			if (len < 0) {
 				perror("read inotify events");
 				exit(-1);
 			}
 
-			if(len == 0) {
+			if (len == 0) {
 				perror("zero read");
 				continue;
 			}
@@ -90,13 +78,13 @@ int main(int argc, char **argv)
 				printf("%5sINOTIFY: event #%d\n", "", ++j);
 				printf("%10swd(%d): mask(0x%08x): %s%s%s%s%s%s%s\n", "",
 					event->wd, event->mask,
-					(event->mask & IN_ISDIR) ? "ISDIR ": "",
-					(event->mask & IN_ACCESS) ? "ACCESS ": "",
-					(event->mask & IN_OPEN) ? "OPEN ": "",
-					(event->mask & IN_MODIFY) ? "MODIFY ": "",
-					(event->mask & IN_CREATE) ? "CREATE ": "",
-					(event->mask & IN_DELETE) ? "DELETE ": "",
-					(event->mask & IN_CLOSE) ? "CLOSE ": "");
+					(event->mask & IN_ISDIR) ? "ISDIR " : "",
+					(event->mask & IN_ACCESS) ? "ACCESS " : "",
+					(event->mask & IN_OPEN) ? "OPEN " : "",
+					(event->mask & IN_MODIFY) ? "MODIFY " : "",
+					(event->mask & IN_CREATE) ? "CREATE " : "",
+					(event->mask & IN_DELETE) ? "DELETE " : "",
+					(event->mask & IN_CLOSE) ? "CLOSE " : "");
 			}
 		}
 	}
