@@ -3,14 +3,14 @@ project('tcp', 'c',
   default_options : ['c_std=gnu99', 'buildtype=debug'],
 )
 
-poll_src = 'srv_poll.c'
-fork_src = 'srv_fork.c'
-select_src = 'srv_select.c'
+poll_src = 's_poll.c'
+fork_src = 's_fork.c'
+select_src = 's_select.c'
 
-executable('srv_fork',  fork_src)
-executable('srv_poll',  poll_src)
-executable('srv_select',  select_src)
+executable('s_fork',  fork_src)
+executable('s_poll',  poll_src)
+executable('s_select',  select_src)
 
-client_src = 'client.c'
+client_src = 'c_select.c'
 
-executable('client', client_src)
+executable('c_select', client_src)
