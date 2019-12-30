@@ -1,29 +1,24 @@
+// SPDX-License-Identifier: GPL-2.0
+
 #include <sys/socket.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-
+//#include <sys/types.h>
+//#include <sys/stat.h>
 #include <arpa/inet.h>
-#include <netinet/in.h>
+//#include <netinet/in.h>
 #include <net/if.h>
-
-#include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 #include <getopt.h>
 #include <errno.h>
 #include <stdio.h>
-#include <fcntl.h>
-
-/* */
+//#include <fcntl.h>
 
 enum tool_type {
 	MCAST_NOTSET = 0x0,
 	MCAST_SERVER = 0x1,
 	MCAST_CLIENT = 0x2,
 };
-
-/* */
 
 void mcast_usage(char *name)
 {
@@ -44,13 +39,11 @@ void mcast_usage(char *name)
 	printf("\nMinimal server example: %s -s -i eth0 -a ff02::5:6 -p 12345\n\n", name);
 }
 
-/* */
-
 void dump_packet(char *b, int n)
 {
 	int p;
 
-	for(p = 0; p < n; p++) {
+	for (p = 0; p < n; p++) {
 		printf("0x%02x ", *(b + p));
 		if ((p > 0) && ((p % 64) == 0))
 			printf("\n");
@@ -59,69 +52,57 @@ void dump_packet(char *b, int n)
 	printf("\n");
 }
 
-/* */
-
-int mcast_server(int sd, bool dump, struct sockaddr_in6 *saddr, struct ipv6_mreq *mreq)
+int mcast_server(int sd, int dump, struct sockaddr_in6 *saddr, struct ipv6_mreq *mreq)
 {
-	int faults = 0;
-	int rc = 0;
-
-	char buf[256];
-	ssize_t len;
-
 	struct timeval tv;
+	char buffer[256];
+	int faults = 0;
+	ssize_t len;
 	fd_set rset;
+	int ret;
 
-	/* bind to mcast addr and port */
-
-	if (bind(sd, (struct sockaddr *)saddr, sizeof(*saddr))) {
+	ret = bind(sd, (struct sockaddr *)saddr, sizeof(*saddr));
+	if (ret < 0) {
 		perror("bind");
 		return -1;
 	}
 
-	/* join mcast group */
-
-	if (setsockopt(sd, IPPROTO_IPV6, IPV6_ADD_MEMBERSHIP, (char *)mreq, sizeof(*mreq))) {
+	ret = setsockopt(sd, IPPROTO_IPV6, IPV6_ADD_MEMBERSHIP, (char *)mreq, sizeof(*mreq));
+	if (ret < 0) {
 		perror("setsockopt IPV6_ADD_MEMBERSHIP");
 		return -1;
 	}
 
-	/* server */
-
 	while (faults < 5) {
-
 		FD_ZERO(&rset);
 		FD_SET(sd, &rset);
-
 		tv.tv_sec = 10;
 		tv.tv_usec = 0;
 
-		rc = select(sd + 1, &rset, NULL, NULL, &tv);
-
-		if (rc == 0) {
+		ret = select(sd + 1, &rset, NULL, NULL, &tv);
+		if (ret == 0) {
 			/* timeout */
 			continue;
 		}
 
-		if (rc < 0) {
+		if (ret < 0) {
 			if (errno == EINTR) {
 				/* select interrupted */
 				faults++;
 				continue;
-			} else {
-				perror("select");
-				break;
 			}
+
+			perror("select");
+			break;
 		}
 
 		if (FD_ISSET(sd, &rset)) {
-
-			len = read(sd, buf, sizeof(buf));
-			buf[len] = '\0';
+			len = read(sd, buffer, sizeof(buffer));
+			buffer[len] = '\0';
 
 			if (len < 0) {
 				perror("read");
-				rc = len;
+				ret = len;
 				break;
 			} else if (len == 0) {
 				printf("read zero bytes...\n");
@@ -129,11 +110,10 @@ int mcast_server(int sd, bool dump, struct sockaddr_in6 *saddr, struct ipv6_mreq
 				continue;
 			} else {
 				if (dump)
-					dump_packet(buf, len);
+					dump_packet(buffer, len);
 				else
-					printf("RECV: %s", buf);
+					printf("RECV: %s", buffer);
 			}
-
 		} else {
 			printf("unexpected select result...\n");
 			faults++;
@@ -141,36 +121,34 @@ int mcast_server(int sd, bool dump, struct sockaddr_in6 *saddr, struct ipv6_mreq
 		}
 	}
 
-	return rc;
+	return ret;
 }
 
-/* */
-
-int mcast_client(int sd, char *msg, bool cont, bool join, struct sockaddr_in6 *saddr, struct ipv6_mreq *mreq)
+int mcast_client(int sd, char *msg, int cont, int join,
+		 struct sockaddr_in6 *saddr, struct ipv6_mreq *mreq)
 {
 	int faults = 0;
-	int rc = 0;
-	char *pkt;
 	int cnt = 0;
-
-	/* join mcast group */
+	char *pkt;
+	int ret;
 
 	if (join) {
-		if (setsockopt(sd, IPPROTO_IPV6, IPV6_ADD_MEMBERSHIP, (char *)mreq, sizeof(*mreq))) {
+		ret = setsockopt(sd, IPPROTO_IPV6, IPV6_ADD_MEMBERSHIP,
+				 (char *)mreq, sizeof(*mreq));
+		if (ret < 0) {
 			perror("setsockopt IPV6_ADD_MEMBERSHIP");
 			return -1;
 		}
 	}
-
-	/* client */
 
 	pkt = calloc(1, strlen(msg) + 10);
 
 	while (faults < 5) {
 		memset(pkt, 0x0, strlen(msg) + 10);
 		snprintf(pkt, strlen(msg) + 10, "%s:%d\n", msg, cnt++);
-		rc = sendto(sd, pkt, strlen(pkt) + 1, 0, (const struct sockaddr *)saddr, sizeof(*saddr));
-		if (rc < 0) {
+		ret = sendto(sd, pkt, strlen(pkt) + 1, 0,
+			     (const struct sockaddr *)saddr, sizeof(*saddr));
+		if (ret < 0) {
 			perror("sendto");
 			faults++;
 		}
@@ -184,34 +162,28 @@ int mcast_client(int sd, char *msg, bool cont, bool join, struct sockaddr_in6 *s
 	}
 
 	free(pkt);
-
-	return rc;
+	return ret;
 }
-
-/* */
 
 int main(int argc, char *argv[])
 {
+	enum tool_type mtype = MCAST_NOTSET;
 	struct sockaddr_in6 *saddr, *maddr;
 	struct ipv6_mreq *mreq;
-	int sd;
-
-	enum tool_type mtype = MCAST_NOTSET;
-	bool cont = false;
-	bool dump = false;
-	bool join = true;
-
 	char *message = NULL;
 	char *ifname = NULL;
-	int ifidx = 0;
 	char *addr = NULL;
 	int port = 9999;
 	int hops = 255;
+	int ifidx = 0;
 	int loop = 1;
-
-	/* parse command line arguments */
-
+	int cont = 0;
+	int dump = 0;
+	int join = 1;
+	int ret;
 	int opt;
+	int sd;
+
 	const char opts[] = "a:p:i:m:sch";
 	const struct option longopts[] = {
 		{"help", no_argument, NULL, 'h'},
@@ -231,47 +203,45 @@ int main(int argc, char *argv[])
 
 	while (opt = getopt_long(argc, argv, opts, longopts, &opt), opt > 0) {
 		switch (opt) {
-			case 'c':
-				mtype = MCAST_CLIENT;
-				break;
-			case 's':
-				mtype = MCAST_SERVER;
-				break;
-			case 'a':
-				addr = strdup(optarg);
-				break;
-			case 'p':
-				port = atoi(optarg);
-				break;
-			case 'i':
-				ifname = strdup(optarg);
-				break;
-			case 'm':
-				message = strdup(optarg);
-				break;
-			case '0':
-				dump = true;
-				break;
-			case '1':
-				hops = atoi(optarg);
-				break;
-			case '2':
-				loop = 0;
-				break;
-			case '3':
-				cont = true;
-				break;
-			case '4':
-				join = false;
-				break;
-			case 'h':
-			default:
-				mcast_usage(argv[0]);
-				exit(0);
+		case 'c':
+			mtype = MCAST_CLIENT;
+			break;
+		case 's':
+			mtype = MCAST_SERVER;
+			break;
+		case 'a':
+			addr = strdup(optarg);
+			break;
+		case 'p':
+			port = atoi(optarg);
+			break;
+		case 'i':
+			ifname = strdup(optarg);
+			break;
+		case 'm':
+			message = strdup(optarg);
+			break;
+		case '0':
+			dump = 1;
+			break;
+		case '1':
+			hops = atoi(optarg);
+			break;
+		case '2':
+			loop = 0;
+			break;
+		case '3':
+			cont = 1;
+			break;
+		case '4':
+			join = 0;
+			break;
+		case 'h':
+		default:
+			mcast_usage(argv[0]);
+			exit(0);
 		}
 	}
-
-	/* sanity check */
 
 	switch (mtype) {
 	case MCAST_SERVER:
@@ -281,7 +251,7 @@ int main(int argc, char *argv[])
 		}
 
 		printf("server: addr[%s] ifname[%s] port[%d] dump[%d]\n",
-				addr, ifname, port, dump);
+		       addr, ifname, port, dump);
 		break;
 	case MCAST_CLIENT:
 		if (!port || !addr || !ifname || !message) {
@@ -290,7 +260,7 @@ int main(int argc, char *argv[])
 		}
 
 		printf("client: addr[%s] ifname[%s] port[%d] hops[%d] loop[%d] message[%s] cont[%d] join[%d]\n",
-				addr, ifname, port, hops, loop, message, cont, join);
+		       addr, ifname, port, hops, loop, message, cont, join);
 		break;
 	default:
 		printf("should be client or server...\n");
@@ -299,8 +269,6 @@ int main(int argc, char *argv[])
 		break;
 
 	}
-
-	/* */
 
 	sd = socket(AF_INET6, SOCK_DGRAM, IPPROTO_UDP);
 	if (sd < 0) {
@@ -314,31 +282,33 @@ int main(int argc, char *argv[])
 		exit(-1);
 	}
 
-	if (setsockopt(sd, SOL_SOCKET, SO_REUSEADDR, &loop, sizeof(loop))) {
+	ret = setsockopt(sd, SOL_SOCKET, SO_REUSEADDR, &loop, sizeof(loop));
+	if (ret < 0) {
 		perror("setsockopt SO_REUSEADDR");
 		exit(-1);
 	}
 
-	if (setsockopt(sd, IPPROTO_IPV6, IPV6_MULTICAST_IF, &ifidx, sizeof(ifidx))) {
+	ret = setsockopt(sd, IPPROTO_IPV6, IPV6_MULTICAST_IF, &ifidx, sizeof(ifidx));
+	if (ret < 0) {
 		perror("setsockopt IPV6_MULTICAST_IF");
 		exit(-1);
 	}
 
-	if (setsockopt(sd, IPPROTO_IPV6, IPV6_MULTICAST_HOPS, &hops, sizeof(hops))) {
+	ret = setsockopt(sd, IPPROTO_IPV6, IPV6_MULTICAST_HOPS, &hops, sizeof(hops));
+	if (ret < 0) {
 		perror("setsockopt IPV6_MULTICAST_HOPS");
 		exit(-1);
 	}
 
-	if (setsockopt(sd, IPPROTO_IPV6, IPV6_MULTICAST_LOOP, &loop, sizeof(loop))) {
+	ret = setsockopt(sd, IPPROTO_IPV6, IPV6_MULTICAST_LOOP, &loop, sizeof(loop));
+	if (ret < 0) {
 		perror("setsockopt IPV6_MULTICAST_LOOP");
 		exit(-1);
 	}
 
-	/* setup saddr and mreq */
-
 	saddr = calloc(1, sizeof(*saddr));
 	if (!saddr) {
-		printf("can't allocate saddr...\n");
+		perror("calloc saddr");
 		exit(-1);
 	}
 
@@ -348,7 +318,7 @@ int main(int argc, char *argv[])
 
 	maddr = calloc(1, sizeof(*maddr));
 	if (!maddr) {
-		printf("can't allocate maddr...\n");
+		perror("calloc maddr");
 		exit(-1);
 	}
 
@@ -358,14 +328,12 @@ int main(int argc, char *argv[])
 
 	mreq = calloc(1, sizeof(*mreq));
 	if (!mreq) {
-		printf("can't allocate mreq...\n");
+		perror("calloc mreq");
 		exit(-1);
 	}
 
 	memcpy(&mreq->ipv6mr_multiaddr, &maddr->sin6_addr, sizeof(mreq->ipv6mr_multiaddr));
 	mreq->ipv6mr_interface = ifidx;
-
-	/* */
 
 	switch (mtype) {
 	case MCAST_SERVER:
@@ -383,7 +351,6 @@ int main(int argc, char *argv[])
 	free(saddr);
 	free(maddr);
 	free(mreq);
-
 	close(sd);
 
 	return 0;
