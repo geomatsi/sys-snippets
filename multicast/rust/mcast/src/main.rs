@@ -1,3 +1,10 @@
+use pretty_hex::*;
+use std::io::stdin;
+use std::net::Ipv4Addr;
+use std::net::UdpSocket;
+use std::process::exit;
+use std::thread;
+use std::time;
 use structopt::StructOpt;
 
 #[derive(StructOpt, Debug)]
@@ -17,7 +24,7 @@ enum Opt {
             help = "multicast port, default value is 9999",
             default_value = "9999"
         )]
-        port: u32,
+        port: u16,
 
         #[structopt(short = "i", long = "ifname", help = "network interface to bind")]
         ifname: String,
@@ -35,7 +42,7 @@ enum Opt {
             help = "multicast port, default value is 9999",
             default_value = "9999"
         )]
-        port: u32,
+        port: u16,
 
         #[structopt(short = "i", long = "ifname", help = "network interface to bind")]
         ifname: String,
@@ -66,33 +73,176 @@ enum Opt {
     },
 }
 
-fn main() {
+fn run_app() -> Result<(), String> {
     let opt = Opt::from_args();
 
-    let (addr, port, ifname) = match &opt {
-        Opt::Client {
-            addr, port, ifname, ..
-        } => (addr, port, ifname),
-        Opt::Server {
-            addr, port, ifname, ..
-        } => (addr, port, ifname),
+    let (addr, ifname) = match &opt {
+        Opt::Client { addr, ifname, .. } => (addr, ifname),
+        Opt::Server { addr, ifname, .. } => (addr, ifname),
     };
 
-    // TODO: basic multicast socket setup
-    println!("addr: {} port: {} ifname: {}", addr, port, ifname);
+    let saddr: Ipv4Addr = match ifname.parse() {
+        Ok(s) => s,
+        Err(e) => {
+            return Err(format!(
+                "failed to parse source interface address {}: {:?}",
+                ifname, e
+            ))
+        }
+    };
+
+    let maddr: Ipv4Addr = match addr.parse() {
+        Ok(s) => s,
+        Err(e) => {
+            return Err(format!(
+                "failed to parse multicast address {}: {:?}",
+                ifname, e
+            ))
+        }
+    };
+
+    if !maddr.is_multicast() {
+        return Err(format!("address {} is not multicast", addr));
+    }
 
     match opt {
-        Opt::Client { .. } => mcast_client(opt),
-        Opt::Server { .. } => mcast_server(opt),
+        Opt::Client { .. } => mcast_client(saddr, maddr, opt),
+        Opt::Server { .. } => mcast_server(saddr, maddr, opt),
+    }
+}
+
+fn mcast_client(saddr: Ipv4Addr, maddr: Ipv4Addr, opt: Opt) -> Result<(), String> {
+    let (port, message, hops, loopback, join, cont) = match opt {
+        Opt::Client {
+            port,
+            message,
+            hops,
+            loopback,
+            join,
+            cont,
+            ..
+        } => (port, message, hops, loopback, join, cont),
+        Opt::Server { .. } => return Err(format!("unexpected enum variant: {:?}", opt)),
     };
+
+    println!(
+        "Client: saddr {:?}, maddr {:?}, port {}, message {}, hops {}, loopback {}, join {}, cont {}",
+        saddr, maddr, port, message, hops, loopback, join, cont
+    );
+
+    let sock = match UdpSocket::bind((saddr, 0)) {
+        Ok(s) => s,
+        Err(e) => {
+            return Err(format!(
+                "failed to bind socket to multicast address: {:?}",
+                e
+            ))
+        }
+    };
+
+    if let Err(e) = sock.set_multicast_ttl_v4(hops) {
+        return Err(format!("failed to set multicast TTL: {:?}", e));
+    }
+
+    if loopback {
+        if let Err(e) = sock.multicast_loop_v4() {
+            return Err(format!("failed to set mcast loop: {:?}", e));
+        }
+    }
+
+    if join {
+        if let Err(e) = sock.join_multicast_v4(&maddr, &saddr) {
+            return Err(format!("failed to join mutlicast group: {:?}", e));
+        }
+    }
+
+    let mut nop = String::new();
+    let mut cnt: u32 = 0;
+
+    loop {
+        if cont {
+            let delay = time::Duration::from_millis(1000);
+            thread::sleep(delay);
+            println!("sending multicast next packet...");
+        } else {
+            println!("press enter to send multicast next packet:");
+            if let Err(e) = stdin().read_line(&mut nop) {
+                return Err(format!("stdio failure: {:?}", e));
+            };
+
+            if nop.is_empty() {
+                println!("done...");
+                break;
+            }
+        }
+
+        match sock.send_to(format!("{}:{}\n", message, cnt).as_bytes(), (maddr, port)) {
+            Ok(_) => {}
+            Err(e) => return Err(format!("failed to send multicast packet: {:?}", e)),
+        };
+
+        cnt += 1;
+    }
+
+    Ok(())
 }
 
-fn mcast_client(opt: Opt) {
-    // TODO: multicast server implementation
-    println!("client processing: {:?}", opt);
+fn mcast_server(saddr: Ipv4Addr, maddr: Ipv4Addr, opt: Opt) -> Result<(), String> {
+    let (port, dump) = match opt {
+        Opt::Client { .. } => return Err(format!("unexpected enum variant: {:?}", opt)),
+        Opt::Server { port, dump, .. } => (port, dump),
+    };
+
+    println!(
+        "Server: saddr {:?}, maddr {:?}, dump {}",
+        saddr, maddr, dump
+    );
+
+    let sock = match UdpSocket::bind((maddr, port)) {
+        Ok(s) => s,
+        Err(e) => {
+            return Err(format!(
+                "failed to bind socket to multicast address: {:?}",
+                e
+            ))
+        }
+    };
+
+    if let Err(e) = sock.join_multicast_v4(&maddr, &saddr) {
+        return Err(format!("failed to join mutlicast group: {:?}", e));
+    }
+
+    let mut buf: [u8; 256] = [0; 256];
+
+    loop {
+        let (size, peer) = match sock.recv_from(&mut buf) {
+            Ok((s, p)) => (s, p),
+            Err(e) => return Err(format!("recv_from failed: {:?}", e)),
+        };
+
+        if dump {
+            println!("{:?}", buf[0..size].to_vec().hex_dump());
+        } else {
+            println!(
+                "recv {} bytes from {:?}: {}",
+                size,
+                peer,
+                String::from_utf8_lossy(&buf)
+            );
+        }
+
+        for e in buf.iter_mut() {
+            *e = 0;
+        }
+    }
 }
 
-fn mcast_server(opt: Opt) {
-    // TODO: multicast client implementation
-    println!("server processing: {:?}", opt);
+fn main() {
+    exit(match run_app() {
+        Ok(_) => 0,
+        Err(err) => {
+            eprintln!("error: {:?}", err);
+            -1
+        }
+    });
 }
