@@ -1,5 +1,8 @@
+use nix::ifaddrs::getifaddrs;
+use nix::sys::socket;
 use pretty_hex::*;
 use std::io::stdin;
+use std::net::IpAddr;
 use std::net::Ipv4Addr;
 use std::net::UdpSocket;
 use std::process::exit;
@@ -26,8 +29,12 @@ enum Opt {
         )]
         port: u16,
 
-        #[structopt(short = "i", long = "ifname", help = "network interface to bind")]
-        ifname: String,
+        #[structopt(
+            short = "b",
+            long = "bind",
+            help = "network interface name or IPv4 address to bind"
+        )]
+        bind: String,
 
         #[structopt(long = "dump", help = "server packet hexdump mode")]
         dump: bool,
@@ -44,8 +51,12 @@ enum Opt {
         )]
         port: u16,
 
-        #[structopt(short = "i", long = "ifname", help = "network interface to bind")]
-        ifname: String,
+        #[structopt(
+            short = "b",
+            long = "bind",
+            help = "network interface name or IPv4 address to bind"
+        )]
+        bind: String,
 
         #[structopt(
             short = "m",
@@ -76,19 +87,14 @@ enum Opt {
 fn run_app() -> Result<(), String> {
     let opt = Opt::from_args();
 
-    let (addr, ifname) = match &opt {
-        Opt::Client { addr, ifname, .. } => (addr, ifname),
-        Opt::Server { addr, ifname, .. } => (addr, ifname),
+    let (addr, bind) = match &opt {
+        Opt::Client { addr, bind, .. } => (addr, bind),
+        Opt::Server { addr, bind, .. } => (addr, bind),
     };
 
-    let saddr: Ipv4Addr = match ifname.parse() {
+    let saddr: Ipv4Addr = match parse_bind_param(bind) {
         Ok(s) => s,
-        Err(e) => {
-            return Err(format!(
-                "failed to parse source interface address {}: {:?}",
-                ifname, e
-            ))
-        }
+        Err(e) => return Err(e),
     };
 
     let maddr: Ipv4Addr = match addr.parse() {
@@ -96,7 +102,7 @@ fn run_app() -> Result<(), String> {
         Err(e) => {
             return Err(format!(
                 "failed to parse multicast address {}: {:?}",
-                ifname, e
+                addr, e
             ))
         }
     };
@@ -109,6 +115,49 @@ fn run_app() -> Result<(), String> {
         Opt::Client { .. } => mcast_client(saddr, maddr, opt),
         Opt::Server { .. } => mcast_server(saddr, maddr, opt),
     }
+}
+
+fn parse_bind_param(param: &str) -> Result<Ipv4Addr, String> {
+    // at first try to consider 'bind' param as IPv4 address
+    if let Ok(saddr) = param.parse() {
+        return Ok(saddr);
+    }
+
+    // then try to consider 'bind' param as network interface name
+    // and return its first IPv4 address if any
+    let addrs = match getifaddrs() {
+        Ok(s) => s,
+        Err(e) => {
+            return Err(format!(
+                "failed to get list of addresses for '{}': {:?}",
+                param, e
+            ))
+        }
+    };
+
+    for ifaddr in addrs {
+        if ifaddr.interface_name != *param {
+            continue;
+        }
+
+        match ifaddr.address {
+            Some(address) => match address {
+                socket::SockAddr::Inet(s) => match s.to_std().ip() {
+                    IpAddr::V4(s) => {
+                        return Ok(s);
+                    }
+                    _ => continue,
+                },
+                _ => continue,
+            },
+            None => continue,
+        }
+    }
+
+    Err(format!(
+        "{} is neither IPv4 address nor interface name",
+        param
+    ))
 }
 
 fn mcast_client(saddr: Ipv4Addr, maddr: Ipv4Addr, opt: Opt) -> Result<(), String> {
