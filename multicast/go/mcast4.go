@@ -1,13 +1,16 @@
 package main
 
 import (
+	"bufio"
+	"encoding/hex"
 	"fmt"
-	//"golang.org/x/net/ipv4"
+	"golang.org/x/net/ipv4"
 	"gopkg.in/urfave/cli.v1"
-	//"net"
+	"io"
 	"log"
-	//"errors"
+	"net"
 	"os"
+	"time"
 )
 
 func main() {
@@ -15,7 +18,6 @@ func main() {
 	mcast.Name = "mcast"
 	mcast.Usage = "IPv4 multicast test tool"
 	mcast.Version = "0.1"
-
 	mcast.Commands = []cli.Command{
 		{
 			Name:    "server",
@@ -29,8 +31,8 @@ func main() {
 				},
 				cli.StringFlag{
 					Name:  "b, bind",
-					Value: "0.0.0.0",
-					Usage: "network interface name or IPv4 address to bind",
+					Value: "eth0",
+					Usage: "network interface name to bind",
 				},
 				cli.IntFlag{
 					Name:  "p, port",
@@ -42,16 +44,7 @@ func main() {
 					Usage: "multicast port, default value is 9999",
 				},
 			},
-			Action: func(c *cli.Context) error {
-				var maddr = c.String("addr")
-				var saddr = c.String("bind")
-				var dump = c.Bool("dump")
-				var port = c.Int("port")
-
-				fmt.Printf("server: maddr[%s] saddr[%s] port[%v] dump[%v]\n",
-					maddr, saddr, port, dump)
-				return nil
-			},
+			Action: mcastServer,
 		},
 		{
 			Name:    "client",
@@ -65,8 +58,8 @@ func main() {
 				},
 				cli.StringFlag{
 					Name:  "b, bind",
-					Value: "0.0.0.0",
-					Usage: "network interface name or IPv4 address to bind",
+					Value: "eth0",
+					Usage: "network interface name to bind",
 				},
 				cli.IntFlag{
 					Name:  "p, port",
@@ -97,21 +90,7 @@ func main() {
 				},
 			},
 
-			Action: func(c *cli.Context) error {
-				var maddr = c.String("addr")
-				var saddr = c.String("bind")
-				var body = c.String("message")
-				var port = c.Int("port")
-				var hops = c.Int("hops")
-				var loop = c.Bool("loopback")
-				var join = c.Bool("join")
-				var cont = c.Bool("cont")
-
-				fmt.Printf("client: maddr[%s] saddr[%s] port[%v] message[%s] hops[%v] loop[%v] join[%v] cont[%v]\n",
-					maddr, saddr, port, body, hops, loop, join, cont)
-
-				return nil
-			},
+			Action: mcastClient,
 		},
 	}
 
@@ -119,4 +98,168 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+}
+
+func mcastClient(c *cli.Context) error {
+	var mstr = c.String("addr")
+	var nstr = c.String("bind")
+	var body = c.String("message")
+	var port = c.Int("port")
+	var hops = c.Int("hops")
+	var loop = c.Bool("loopback")
+	var join = c.Bool("join")
+	var cont = c.Bool("cont")
+
+	intf, err := net.InterfaceByName(nstr)
+	if err != nil {
+		return fmt.Errorf("Interface %s does not exists", nstr)
+	}
+
+	maddr, err := net.ResolveUDPAddr("udp4", fmt.Sprintf("%s:%d", mstr, port))
+	if err != nil {
+		return fmt.Errorf("Invalid IPv4 address: %s", mstr)
+	}
+
+	if !maddr.IP.IsMulticast() {
+		return fmt.Errorf("IPv4 address %s is not multicast", mstr)
+	}
+
+	saddrs, err := intf.Addrs()
+	if err != nil {
+		return fmt.Errorf("Failed to get list of unicast addresses for %s", intf)
+	}
+
+	var saddr string
+
+	for _, a := range saddrs {
+		ip, _, err := net.ParseCIDR(a.String())
+		if err != nil {
+			continue
+		}
+
+		if ip.To4() != nil {
+			saddr = ip.String()
+			break
+		}
+	}
+
+	if len(saddr) == 0 {
+		return fmt.Errorf("Failed to get IPv4 address for %s", intf)
+	}
+
+	conn, err := net.ListenPacket("udp4", fmt.Sprintf(fmt.Sprintf("%s:0", saddr)))
+	if err != nil {
+		return fmt.Errorf("Failed to listen to :%d", port)
+	}
+	defer conn.Close()
+
+	pconn := ipv4.NewPacketConn(conn)
+	defer pconn.Close()
+
+	if err := pconn.SetMulticastInterface(intf); err != nil {
+		return fmt.Errorf("Failed to set multicast interface to %s", intf)
+	}
+
+	if join {
+		if err := pconn.JoinGroup(intf, maddr); err != nil {
+			return fmt.Errorf("Failed to join multicast group %s on %s", maddr, intf)
+		}
+	}
+
+	if hops > 0 && hops < 255 {
+		if err := pconn.SetMulticastTTL(hops); err != nil {
+			return fmt.Errorf("Failed to set multicast TTL to %d for %s on %s", hops, maddr, intf)
+		}
+	}
+
+	if err := pconn.SetMulticastLoopback(loop); err != nil {
+		return fmt.Errorf("Failed to set multicast loopback for %s on %s", maddr, intf)
+	}
+
+	fmt.Printf("Client ready: maddr[%v] intf[%s] port[%d] hops[%d] join[%v] loop[%v] cont[%v]\n",
+		maddr.IP, intf.Name, port, hops, join, loop, cont)
+
+	var reader *bufio.Reader = bufio.NewReader(os.Stdin)
+	var cnt int = 0
+
+	for {
+		if cont {
+			time.Sleep(1 * time.Second)
+			fmt.Printf("sending packet %d...\n", cnt)
+		} else {
+			fmt.Println("press enter to send the next multicast packet...")
+			_, err = reader.ReadString('\n')
+			if err != nil {
+				if err == io.EOF {
+					fmt.Printf("Client done\n")
+					return nil
+				}
+
+				return fmt.Errorf("stdio read failure: %s", err)
+			}
+		}
+
+		_, err = pconn.WriteTo([]byte(fmt.Sprintf("%s:%d\n", body, cnt)), nil, maddr)
+		if err != nil {
+			return fmt.Errorf("failed to send multicast packet: %s", err)
+		}
+
+		cnt++
+	}
+
+	return nil
+}
+
+func mcastServer(ctx *cli.Context) error {
+	var mstr = ctx.String("addr")
+	var nstr = ctx.String("bind")
+	var dump = ctx.Bool("dump")
+	var port = ctx.Int("port")
+
+	intf, err := net.InterfaceByName(nstr)
+	if err != nil {
+		return fmt.Errorf("Interface %s does not exists", nstr)
+	}
+
+	maddr, err := net.ResolveUDPAddr("udp4", fmt.Sprintf("%s:0", mstr))
+	if err != nil {
+		return fmt.Errorf("Invalid IPv4 address: %s", mstr)
+	}
+
+	if !maddr.IP.IsMulticast() {
+		return fmt.Errorf("IPv4 address %s is not multicast", mstr)
+	}
+
+	conn, err := net.ListenPacket("udp4", fmt.Sprintf(":%d", port))
+	if err != nil {
+		return fmt.Errorf("Failed to listen to :%d", port)
+	}
+	defer conn.Close()
+
+	pconn := ipv4.NewPacketConn(conn)
+	defer pconn.Close()
+
+	if err := pconn.JoinGroup(intf, maddr); err != nil {
+		return fmt.Errorf("Failed to join multicast group %s on %s", maddr, intf)
+	}
+
+	fmt.Printf("Server ready: maddr[%v] intf[%s] port[%d] dump[%v]\n",
+		maddr.IP, intf.Name, port, dump)
+
+	var buffer []byte = make([]byte, 1500)
+
+	for {
+		size, _, addr, err := pconn.ReadFrom(buffer)
+		if err != nil {
+			return fmt.Errorf("Failed to read from %s", pconn)
+		}
+
+		if dump {
+			fmt.Printf("received % bytes from %v:\n%s", size, addr, hex.Dump(buffer[0:size]))
+		} else {
+			fmt.Printf("received %v bytes from %v: %s\n", size, addr, buffer)
+		}
+	}
+
+	return nil
 }
