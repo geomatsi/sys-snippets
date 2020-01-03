@@ -193,10 +193,8 @@ fn mcast_client(saddr: Ipv4Addr, maddr: Ipv4Addr, opt: Opt) -> Result<(), String
         return Err(format!("failed to set multicast TTL: {:?}", e));
     }
 
-    if loopback {
-        if let Err(e) = sock.multicast_loop_v4() {
-            return Err(format!("failed to set mcast loop: {:?}", e));
-        }
+    if let Err(e) = sock.set_multicast_loop_v4(loopback) {
+        return Err(format!("failed to set mcast loop: {:?}", e));
     }
 
     if join {
