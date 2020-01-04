@@ -100,6 +100,29 @@ func main() {
 	}
 }
 
+func getInterfaceAddrIPv4(intf *net.Interface) (string, error) {
+	var addr string
+
+	addrs, err := intf.Addrs()
+	if err != nil {
+		return addr, fmt.Errorf("Failed to get list of unicast addresses for %s", intf.Name)
+	}
+
+	for _, a := range addrs {
+		ip, _, err := net.ParseCIDR(a.String())
+		if err != nil {
+			continue
+		}
+
+		if ip.To4() != nil {
+			addr = ip.String()
+			break
+		}
+	}
+
+	return addr, nil
+}
+
 func mcastClient(c *cli.Context) error {
 	var mstr = c.String("addr")
 	var nstr = c.String("bind")
@@ -117,39 +140,25 @@ func mcastClient(c *cli.Context) error {
 
 	maddr, err := net.ResolveUDPAddr("udp4", fmt.Sprintf("%s:%d", mstr, port))
 	if err != nil {
-		return fmt.Errorf("Invalid IPv4 address: %s", mstr)
+		return fmt.Errorf("Invalid IPv4 address/port pair: %s:%d", mstr, port)
 	}
 
 	if !maddr.IP.IsMulticast() {
 		return fmt.Errorf("IPv4 address %s is not multicast", mstr)
 	}
 
-	saddrs, err := intf.Addrs()
+	saddr, err := getInterfaceAddrIPv4(intf)
 	if err != nil {
-		return fmt.Errorf("Failed to get list of unicast addresses for %s", intf)
-	}
-
-	var saddr string
-
-	for _, a := range saddrs {
-		ip, _, err := net.ParseCIDR(a.String())
-		if err != nil {
-			continue
-		}
-
-		if ip.To4() != nil {
-			saddr = ip.String()
-			break
-		}
+		return err
 	}
 
 	if len(saddr) == 0 {
-		return fmt.Errorf("Failed to get IPv4 address for %s", intf)
+		return fmt.Errorf("Failed to get IPv4 address for %s", intf.Name)
 	}
 
 	conn, err := net.ListenPacket("udp4", fmt.Sprintf(fmt.Sprintf("%s:0", saddr)))
 	if err != nil {
-		return fmt.Errorf("Failed to listen to :%d", port)
+		return fmt.Errorf("Failed to create UDP socket for %s:0", saddr)
 	}
 	defer conn.Close()
 
@@ -157,26 +166,26 @@ func mcastClient(c *cli.Context) error {
 	defer pconn.Close()
 
 	if err := pconn.SetMulticastInterface(intf); err != nil {
-		return fmt.Errorf("Failed to set multicast interface to %s", intf)
+		return fmt.Errorf("Failed to set multicast interface to %s", intf.Name)
 	}
 
 	if join {
 		if err := pconn.JoinGroup(intf, maddr); err != nil {
-			return fmt.Errorf("Failed to join multicast group %s on %s", maddr, intf)
+			return fmt.Errorf("Failed to join multicast group %s on %s", maddr.IP, intf.Name)
 		}
 	}
 
 	if hops > 0 && hops < 255 {
 		if err := pconn.SetMulticastTTL(hops); err != nil {
-			return fmt.Errorf("Failed to set multicast TTL to %d for %s on %s", hops, maddr, intf)
+			return fmt.Errorf("Failed to set multicast TTL to %d for %s on %s", hops, maddr.IP, intf.Name)
 		}
 	}
 
 	if err := pconn.SetMulticastLoopback(loop); err != nil {
-		return fmt.Errorf("Failed to set multicast loopback for %s on %s", maddr, intf)
+		return fmt.Errorf("Failed to set multicast loopback for %s on %s", maddr.IP, intf.Name)
 	}
 
-	fmt.Printf("Client ready: maddr[%v] intf[%s] port[%d] hops[%d] join[%v] loop[%v] cont[%v]\n",
+	fmt.Printf("Client ready: addr[%v] intf[%s] port[%d] hops[%d] join[%v] loop[%v] cont[%v]\n",
 		maddr.IP, intf.Name, port, hops, join, loop, cont)
 
 	var reader *bufio.Reader = bufio.NewReader(os.Stdin)
