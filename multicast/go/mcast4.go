@@ -230,7 +230,7 @@ func mcastServer(ctx *cli.Context) error {
 		return fmt.Errorf("Interface %s does not exists", nstr)
 	}
 
-	maddr, err := net.ResolveUDPAddr("udp4", fmt.Sprintf("%s:0", mstr))
+	maddr, err := net.ResolveUDPAddr("udp4", fmt.Sprintf("%s:%d", mstr, port))
 	if err != nil {
 		return fmt.Errorf("Invalid IPv4 address: %s", mstr)
 	}
@@ -239,9 +239,9 @@ func mcastServer(ctx *cli.Context) error {
 		return fmt.Errorf("IPv4 address %s is not multicast", mstr)
 	}
 
-	conn, err := net.ListenPacket("udp4", fmt.Sprintf(":%d", port))
+	conn, err := net.ListenPacket("udp4", fmt.Sprintf("%s:%d", mstr, port))
 	if err != nil {
-		return fmt.Errorf("Failed to listen to :%d", port)
+		return fmt.Errorf("Failed to create UDP socket for %s:%d", mstr, port)
 	}
 	defer conn.Close()
 
@@ -249,7 +249,11 @@ func mcastServer(ctx *cli.Context) error {
 	defer pconn.Close()
 
 	if err := pconn.JoinGroup(intf, maddr); err != nil {
-		return fmt.Errorf("Failed to join multicast group %s on %s", maddr, intf)
+		return fmt.Errorf("Failed to join multicast group %s on %s", maddr.IP, intf.Name)
+	}
+
+	if err := pconn.SetControlMessage(ipv4.FlagDst, true); err != nil {
+		return fmt.Errorf("Failed to configure control message for %s on %s", maddr.IP, intf.Name)
 	}
 
 	fmt.Printf("Server ready: maddr[%v] intf[%s] port[%d] dump[%v]\n",
@@ -258,15 +262,19 @@ func mcastServer(ctx *cli.Context) error {
 	var buffer []byte = make([]byte, 1500)
 
 	for {
-		size, _, addr, err := pconn.ReadFrom(buffer)
+		size, cm, addr, err := pconn.ReadFrom(buffer)
 		if err != nil {
 			return fmt.Errorf("Failed to read from %s", pconn)
 		}
 
-		if dump {
-			fmt.Printf("received % bytes from %v:\n%s", size, addr, hex.Dump(buffer[0:size]))
-		} else {
-			fmt.Printf("received %v bytes from %v: %s\n", size, addr, buffer)
+		if cm.Dst.IsMulticast() {
+			if cm.Dst.Equal(maddr.IP) {
+				if dump {
+					fmt.Printf("received %d bytes from %v:\n%s", size, addr, hex.Dump(buffer[0:size]))
+				} else {
+					fmt.Printf("received %v bytes from %v: %s\n", size, addr, buffer)
+				}
+			}
 		}
 	}
 
