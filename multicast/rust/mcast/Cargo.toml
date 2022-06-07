@@ -6,7 +6,7 @@ edition = "2018"
 
 [dependencies]
 pretty-hex = "0.1.1"
-nix = "0.16.1"
+nix = "0.20.2"
 
 [dependencies.structopt]
 version = "0.3"
