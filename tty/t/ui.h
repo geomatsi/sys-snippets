@@ -15,8 +15,10 @@
 #define DOWN    (1 << 3)
 #define QUIT    (1 << 7)
 
-void draw_screen(char *, unsigned int, unsigned int);
-unsigned int get_keys(void);
+int ui_init(void);
+void ui_draw_screen(char *, unsigned int, unsigned int);
+unsigned int ui_get_keys(void);
+void ui_deinit(void);
 
 
 #endif /* __UI_H__ */

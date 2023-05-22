@@ -22,7 +22,13 @@
 #define RED      197
 #define GRAY     245
 
-void draw_screen(char *p_screen, unsigned int width, unsigned int height)
+int ui_init(void)
+{
+	printf(CLEAR);
+	return 0;
+}
+
+void ui_draw_screen(char *p_screen, unsigned int width, unsigned int height)
 {
 	unsigned int x, y;
 
@@ -67,7 +73,7 @@ void draw_screen(char *p_screen, unsigned int width, unsigned int height)
 	}
 }
 
-unsigned int get_keys(void)
+unsigned int ui_get_keys(void)
 {
 	struct termios tp1, tp2;
 	char buffer[16] = {0};
@@ -121,4 +127,9 @@ unsigned int get_keys(void)
 	fflush(stdin);
 
 	return cmds;
+}
+
+void ui_deinit(void)
+{
+
 }

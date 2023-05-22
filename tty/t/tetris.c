@@ -113,6 +113,7 @@ int main(void)
 	bool game_over = false;
 	unsigned int i, x, y;
 	unsigned int keys;
+	int ret;
 
 	/* field */
 
@@ -136,6 +137,14 @@ int main(void)
 	unsigned int n_count = 0;
 	unsigned int n_score = 0;
 	bool n_down = false;
+
+	/* init ui */
+
+	ret = ui_init();
+	if (ret) {
+		printf("failed to init user interface backend");
+		return ret;
+	}
 
 	/* init random */
 
@@ -180,7 +189,7 @@ int main(void)
 
 		/* user input */
 
-		keys = get_keys();
+		keys = ui_get_keys();
 
 		/* logic */
 
@@ -276,7 +285,7 @@ int main(void)
 		/* remove full rows and 'animate' process */
 
 		if (remove_full_row) {
-			draw_screen(p_screen, SCREEN_W, SCREEN_H);
+			ui_draw_screen(p_screen, SCREEN_W, SCREEN_H);
 
 			for (i = 0; i < sizeof(full_rows) / sizeof(full_rows[0]); i++) {
 				unsigned int row = full_rows[i];
@@ -308,8 +317,10 @@ int main(void)
 
 		/* render screen */
 
-		draw_screen(p_screen, SCREEN_W, SCREEN_H);
+		ui_draw_screen(p_screen, SCREEN_W, SCREEN_H);
 	}
+
+	ui_deinit();
 
 	printf("game over, your score: %u\n", n_score);
 
