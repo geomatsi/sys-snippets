@@ -4,7 +4,7 @@
 #define FIELD_H    18
 #define FIELD_W    12
 
-#define SCREEN_H   80
+#define SCREEN_H   30
 #define SCREEN_W   30
 
 #define SSIZE	4
@@ -16,7 +16,7 @@
 #define QUIT    (1 << 7)
 
 int ui_init(void);
-void ui_draw_screen(char *, unsigned int, unsigned int);
+void ui_draw_screen(char *, unsigned int, unsigned int, int);
 unsigned int ui_get_keys(void);
 void ui_deinit(void);
 

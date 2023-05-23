@@ -28,7 +28,7 @@ int ui_init(void)
 	return 0;
 }
 
-void ui_draw_screen(char *p_screen, unsigned int width, unsigned int height)
+void ui_draw_screen(char *p_screen, unsigned int width, unsigned int height, int score)
 {
 	unsigned int x, y;
 
@@ -68,9 +68,14 @@ void ui_draw_screen(char *p_screen, unsigned int width, unsigned int height)
 					break;
 			}
 
-			printf(POSYX COLOR "%c", y, x, color, ch);
+			printf(POSYX COLOR "%c", y + (SCREEN_H - height) / 2, x + (SCREEN_W - width) / 2, color, ch);
+			fflush(stdout);
 		}
 	}
+
+	printf(POSYX "SCORE: %06d", SCREEN_H - 4, SCREEN_W / 2 - 6, score);
+	printf(POSYX, 200, 200);
+	fflush(stdout);
 }
 
 unsigned int ui_get_keys(void)

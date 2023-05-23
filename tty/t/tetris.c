@@ -103,7 +103,7 @@ void field_to_screen(char *p_field, char *p_screen)
 
 	for (x = 0; x < FIELD_W; x++) {
 		for (y = 0; y < FIELD_H; y++) {
-			p_screen[(y + 2) * SCREEN_W + (x + 2)] = symbols[(unsigned int)p_field[y * FIELD_W + x]];
+			p_screen[y * FIELD_W + x] = symbols[(unsigned int)p_field[y * FIELD_W + x]];
 		}
 	}
 }
@@ -166,13 +166,13 @@ int main(void)
 
 	/* allocate and clear screen */
 
-	p_screen = malloc(SCREEN_W * SCREEN_H * sizeof(char));
+	p_screen = malloc(FIELD_W * FIELD_H * sizeof(char));
 	if (!p_screen) {
 		perror("failed to allocate screen memory");
 		exit(-1);
 	}
 
-	for (i = 0; i < SCREEN_W * SCREEN_H; i++) {
+	for (i = 0; i < FIELD_W * FIELD_H; i++) {
 		p_screen[i] = ' ';
 	}
 
@@ -285,7 +285,7 @@ int main(void)
 		/* remove full rows and 'animate' process */
 
 		if (remove_full_row) {
-			ui_draw_screen(p_screen, SCREEN_W, SCREEN_H);
+			ui_draw_screen(p_screen, FIELD_W, FIELD_H, n_score);
 
 			for (i = 0; i < sizeof(full_rows) / sizeof(full_rows[0]); i++) {
 				unsigned int row = full_rows[i];
@@ -311,13 +311,13 @@ int main(void)
 		for (x = 0; x < SSIZE; x++) {
 			for (y = 0; y < SSIZE; y++) {
 				if (shape[cs][rotate(x, y, cr)] == 'X')
-					p_screen[(cy + y + 2) * SCREEN_W + (cx + x + 2)] = symbols[cs + 1];
+					p_screen[(cy + y) * FIELD_W + (cx + x)] = symbols[cs + 1];
 			}
 		}
 
 		/* render screen */
 
-		ui_draw_screen(p_screen, SCREEN_W, SCREEN_H);
+		ui_draw_screen(p_screen, FIELD_W, FIELD_H, n_score);
 	}
 
 	ui_deinit();
