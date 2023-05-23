@@ -6,7 +6,7 @@
 int main(void)
 {
 	unsigned int count = 0;
-	int running = false;
+	int running = true;
 	int ch;
 
 	initscr();
@@ -42,7 +42,9 @@ int main(void)
 			case KEY_DOWN:
 				printw("KEY_DOWN\n");
 				break;
-			case KEY_Q:
+			case 'q':
+				running = false;
+				break;
 			default:
 				printw("UNKNOWN: 0x%x\n", ch);
 				break;

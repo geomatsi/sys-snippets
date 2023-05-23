@@ -13,12 +13,15 @@ tetris1: tetris.o term.o ui.h
 tetris2: tetris.o ncurs.o ui.h
 	$(CC) $(LDFLAGS) -lncurses $^ -o $@
 
-tests: t1 t2
+tests: t1 t2 t3
 
 t1: t1.o
 	$(CC) $(LDFLAGS) $^ -o $@
 
 t2: t2.o
+	$(CC) $(LDFLAGS) -lncurses $^ -o $@
+
+t3: t3.o
 	$(CC) $(LDFLAGS) -lncurses $^ -o $@
 
 %.o: %.c
@@ -27,6 +30,6 @@ t2: t2.o
 clean:
 	rm -rf *.o *.core
 	rm -rf tetris1 tetris2 tetris3
-	rm -rf t1 t2 t3
+	rm -rf t1 t2 t3 t4
 
 .PHONY: all clean tests
