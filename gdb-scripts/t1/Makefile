@@ -26,11 +26,14 @@ VIRT1_LDS := ld/virt.ld
 # - qemu-system-riscv32: device requires 33554432 bytes, block backend provides 67108864 bytes
 # So pad binary size to half flash size
 virt1: $(VIRT1_LDS) $(VIRT1_SRC)
-	$(CC) $(CCFLAGS) -T$< $(filter-out $<, $^) -o $@.elf
-	$(CP) -O binary --gap-fill 0x00 --pad-to 0x22000000 $@.elf $@.bin
+	@$(CC) $(CCFLAGS) -T$< $(filter-out $<, $^) -o $@.elf
+	@$(CP) -O binary --gap-fill 0x00 --pad-to 0x22000000 $@.elf $@.bin
 
 qemu: virt1
-	$(QEMU) $(QEMU_ARGS) -bios none -drive if=pflash,file=$<.bin,readonly=on,format=raw
+	@$(QEMU) $(QEMU_ARGS) -bios none -drive if=pflash,file=$<.bin,readonly=on,format=raw
+
+gdb: virt1
+	@$(QEMU) $(QEMU_ARGS) -bios none -drive if=pflash,file=$<.bin,readonly=on,format=raw -s -S
 
 %.o: %.c
 

@@ -1,6 +1,7 @@
-#include <stdio.h>
-
-void stack(void)
+unsigned int f(unsigned int n)
 {
-	printf("stack\n");
+	if (n <= 1)
+		return 1;
+
+	return n * f(n - 1);
 }

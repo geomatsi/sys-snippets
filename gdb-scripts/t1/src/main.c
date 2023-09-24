@@ -1,12 +1,16 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-void stack(void);
+unsigned int f(unsigned int);
 
 int main(void)
 {
-	printf("hello world\n");
-	for (int i = 0; i < 10; i++)
-		stack();
+	unsigned int m;
+
+	for (unsigned int n = 0; n < 35; n += 5) {
+		m = f(n);
+		printf("%u! = %u\n", n, m);
+	}
+
 	exit(0);
 }
