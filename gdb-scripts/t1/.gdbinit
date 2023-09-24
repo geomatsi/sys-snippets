@@ -2,5 +2,5 @@
 target remote :1234
 
 # load python scripts with custom gdb commands
-source hello.py
-source stack.py
+source scripts/hello.py
+source scripts/stack.py
