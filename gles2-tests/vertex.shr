@@ -1,0 +1,9 @@
+attribute highp vec4 vPosition;
+uniform mediump mat4 myPMVMatrix;
+attribute mediump vec4 myUV;
+varying mediump vec2 myTexCoord;
+void main()
+{
+	gl_Position = myPMVMatrix * vPosition;
+	myTexCoord = myUV.st;
+}

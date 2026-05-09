@@ -1,0 +1,3 @@
+*.o
+test-x11
+test-vivante
